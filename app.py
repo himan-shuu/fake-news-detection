@@ -1,7 +1,31 @@
+import os
+import requests
+import zipfile
 import streamlit as st
 import tensorflow as tf
 from transformers import BertTokenizer
-import numpy as np
+
+st.title("📰 Fake News Detection App")
+st.write("Detect fake news using BERT + BiLSTM model.")
+
+# ----------------------------
+# Download model & tokenizer if not exists
+# ----------------------------
+MODEL_URL = "https://github.com/himan-shuu/fake-news-detection/raw/main/fake_news_model.h5"
+TOKENIZER_ZIP_URL = "https://github.com/himan-shuu/fake-news-detection/archive/refs/heads/main.zip"
+
+if not os.path.exists("fake_news_model.h5"):
+    r = requests.get(MODEL_URL)
+    with open("fake_news_model.h5", "wb") as f:
+        f.write(r.content)
+
+if not os.path.exists("fake_news_tokenizer"):
+    r = requests.get(TOKENIZER_ZIP_URL)
+    with open("repo.zip", "wb") as f:
+        f.write(r.content)
+    with zipfile.ZipFile("repo.zip", "r") as zip_ref:
+        zip_ref.extractall(".")
+    os.rename("fake-news-detection-main/fake_news_tokenizer", "fake_news_tokenizer")
 
 # ----------------------------
 # Load model and tokenizer
@@ -17,16 +41,12 @@ model, tokenizer = load_model_and_tokenizer()
 # ----------------------------
 # Streamlit UI
 # ----------------------------
-st.title("📰 Fake News Detection App")
-st.write("This app uses a fine-tuned BERT + BiLSTM model to detect fake news.")
-
 user_input = st.text_area("Enter a news headline or article text:")
 
 if st.button("Predict"):
     if not user_input.strip():
         st.warning("⚠️ Please enter some text.")
     else:
-        # Tokenize input
         inputs = tokenizer(
             [user_input],
             return_tensors="tf",
@@ -34,8 +54,6 @@ if st.button("Predict"):
             padding=True,
             max_length=128
         )
-
-        # Model prediction
         preds = model(inputs)
         probs = tf.nn.softmax(preds.logits if hasattr(preds, "logits") else preds, axis=-1)
         pred_class = int(tf.argmax(probs, axis=1))
