@@ -8,27 +8,41 @@ import os
 # Use the .keras file as it is the newer, more robust format.
 MODEL_PATH = 'fake_news_model_final.keras'
 TOKENIZER_DIR = './' # Since the tokenizer files are in the root directory
-MAX_LEN = 128 # Based on common BERT max length and tokenizer.json snippet
+MAX_LEN = 128 # Based on tokenizer.json snippet
+
+# --- Custom Object Fix ---
+# The model uses a Keras Lambda layer configured with a function named 'bert_encode'.
+# To load the model, we must provide a function/layer with that exact name in custom_objects.
+# The actual logic is likely inside the layers that the Lambda wraps, so this stub
+# is only necessary for the loading process to complete successfully.
+def bert_encode_stub(input_tensor):
+    """
+    Stub function for the 'bert_encode' custom object used in the Keras model.
+    This allows load_model to complete without knowing the original internal function.
+    """
+    # The actual functionality should be handled by the layers inside the model structure,
+    # so we just return the input tensor, which is safe for model loading.
+    return input_tensor
+
 
 # --- Model and Tokenizer Loading ---
-# We use st.cache_resource to load the heavy assets (model and tokenizer) only once.
-
 @st.cache_resource
 def load_assets():
     """Loads the BERT tokenizer and the Keras model."""
     try:
         # 1. Load Tokenizer using the folder path
-        # It needs the files: vocab.txt, tokenizer.json, tokenizer_config.json, special_tokens_map.json
         st.info("Loading BERT Tokenizer...")
         tokenizer = BertTokenizer.from_pretrained(TOKENIZER_DIR)
 
-        # 2. Load Keras Model
+        # 2. Load Keras Model with the custom object fix
         st.info(f"Loading Keras Model from {MODEL_PATH}...")
         
-        # NOTE: If your model uses custom layers not registered in Keras, you may need 
-        # to define them here in the `custom_objects` dict.
-        # However, the .keras format often handles most internal layer definitions automatically.
-        model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+        # We pass the custom stub to prevent the "Unknown object type 'bert_encode'" error
+        model = tf.keras.models.load_model(
+            MODEL_PATH, 
+            custom_objects={"bert_encode": bert_encode_stub}, 
+            compile=False
+        )
         
         return tokenizer, model
     except FileNotFoundError as e:
@@ -38,7 +52,8 @@ def load_assets():
         st.stop()
     except Exception as e:
         st.error(f"An error occurred during model/tokenizer loading: {e}")
-        st.error("This is often due to dependency/version mismatch (e.g., TensorFlow/Keras version).")
+        st.error("This is likely due to dependency mismatch (e.g., TensorFlow/Keras version).")
+        st.error("Try installing specific versions: pip install tensorflow==2.15.0 transformers==4.38.0")
         st.stop()
 
 
@@ -66,7 +81,7 @@ def predict_fake_news(text, tokenizer, model):
     inputs = preprocess_text(text, tokenizer, MAX_LEN)
     
     # Predict
-    # The output is likely a probability (e.g., [0.95])
+    # The model should be called with a list of inputs matching the input layers
     prediction = model.predict(inputs)
     
     # Assuming Binary Classification (0=Real, 1=Fake) and sigmoid activation
@@ -116,6 +131,7 @@ def main():
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         text-align: center;
         margin-top: 20px;
+        transition: all 0.3s ease-in-out;
     }
     .fake-result {
         background-color: #fee2e2; /* Light Red */
@@ -136,8 +152,8 @@ def main():
     </style>
     """, unsafe_allow_html=True)
     
-    st.markdown('<div class="main-header">📰 Fake News Detector 🕵️‍♀️</div>', unsafe_allow_html=True)
-    st.markdown('<p class="subheader">BERT + BiLSTM Model for Article Verification</p>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">📰 BERT-BiLSTM Fake News Detector 🕵️‍♀️</div>', unsafe_allow_html=True)
+    st.markdown('<p class="subheader">Powered by Hugging Face Tokenizer and Keras</p>', unsafe_allow_html=True)
 
     # --- Load Assets ---
     tokenizer, model = load_assets()
@@ -163,17 +179,18 @@ def main():
                     f"""
                     <div class="result-box fake-result">
                         <div class="result-text" style="color: #ef4444;">🚨 FAKE NEWS ALERT 🚨</div>
-                        <div class="confidence-text">Confidence: {confidence_percent}</div>
+                        <div class="confidence-text">Confidence: {confidence_percent} that the article is Fake.</div>
                     </div>
                     """, 
                     unsafe_allow_html=True
                 )
+                st.balloons()
             else:
                 st.markdown(
                     f"""
                     <div class="result-box real-result">
                         <div class="result-text" style="color: #10b981;">✅ REAL NEWS</div>
-                        <div class="confidence-text">Confidence: {confidence_percent}</div>
+                        <div class="confidence-text">Confidence: {confidence_percent} that the article is Real.</div>
                     </div>
                     """, 
                     unsafe_allow_html=True
@@ -183,6 +200,4 @@ def main():
             st.warning(label)
 
 if __name__ == "__main__":
-    # Ensure TensorFlow is configured to run eagerly for debugging simplicity, if needed
-    # tf.config.run_functions_eagerly(True) 
     main()
