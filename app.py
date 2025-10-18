@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 from transformers import BertTokenizer
 import os
-import json # New import for manual JSON reading
+import json 
 
 # --- Configuration Constants ---
 # Using the .h5 file for file accessibility.
@@ -24,34 +24,23 @@ def bert_encode_stub(input_tensor):
 def load_assets():
     """Loads the BERT tokenizer, the Keras model, and its expected input names."""
     try:
-        # 1. Load Tokenizer Components Manually
-        st.info("Loading BERT Tokenizer Components Manually...")
+        # 1. Load Tokenizer Components Manually (minimalist approach to avoid JSON error)
+        st.info("Loading BERT Tokenizer using only vocab.txt...")
         
-        # Manually load vocab.txt
         vocab_path = os.path.join(TOKENIZER_DIR, 'vocab.txt')
         if not os.path.exists(vocab_path):
             raise FileNotFoundError(f"Vocab file not found at: {vocab_path}")
             
-        # Manually load JSON configurations
-        config_path = os.path.join(TOKENIZER_DIR, 'tokenizer_config.json')
-        special_tokens_path = os.path.join(TOKENIZER_DIR, 'special_tokens_map.json')
-        
-        if not os.path.exists(config_path) or not os.path.exists(special_tokens_path):
-             raise FileNotFoundError("One or more tokenizer JSON config files are missing.")
-        
-        # Read the JSON files explicitly
-        with open(config_path, 'r', encoding='utf-8') as f:
-            tokenizer_config = json.load(f)
-            
-        with open(special_tokens_path, 'r', encoding='utf-8') as f:
-            special_tokens_map = json.load(f)
-            
-        # Use the raw constructor and pass files/configs directly
+        # CRITICAL FIX: Instantiate BertTokenizer using only the vocab file 
+        # and standard BERT special tokens. This bypasses reading the problematic JSON files.
         tokenizer = BertTokenizer(
             vocab_file=vocab_path,
-            **tokenizer_config, # Unpack settings from tokenizer_config.json
-            **special_tokens_map, # Unpack special tokens from special_tokens_map.json
-            do_lower_case=True 
+            do_lower_case=True,
+            cls_token='[CLS]',
+            sep_token='[SEP]',
+            pad_token='[PAD]',
+            unk_token='[UNK]',
+            mask_token='[MASK]'
         )
 
         # 2. Load Keras Model with the custom object fix
@@ -73,12 +62,9 @@ def load_assets():
         st.error(f"Asset loading failed: One or more required files were not found.")
         st.error(f"Missing file or directory issue: {e}")
         st.stop()
-    except json.JSONDecodeError as e:
-        st.error(f"JSON Decoding Error: One of your tokenizer JSON files is likely corrupted or empty. Error: {e}")
-        st.error("This is the 'Expecting value' error. Please re-upload or check your JSON files.")
-        st.stop()
     except Exception as e:
-        st.error(f"An error occurred during model/tokenizer loading: {e}")
+        # Catch any remaining generic errors (like the Keras ValueError, if it returns)
+        st.error(f"An error occurred during asset loading: {e}")
         st.error("This is likely due to dependency mismatch. Try installing specific versions: pip install tensorflow==2.15.0 transformers==4.38.0")
         st.stop()
 
