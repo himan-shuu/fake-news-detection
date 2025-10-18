@@ -5,23 +5,16 @@ from transformers import BertTokenizer
 import os
 
 # --- Configuration Constants ---
-# CHANGED: Switching to the .h5 file for greater file accessibility/robustness in deployment.
+# Using the .h5 file as switched in the previous step.
 MODEL_PATH = 'fake_news_model_final.h5' 
 TOKENIZER_DIR = './' # Since the tokenizer files are in the root directory
 MAX_LEN = 128 # Based on tokenizer.json snippet
 
-# --- Custom Object Fix ---
-# The model uses a Keras Lambda layer configured with a function named 'bert_encode'.
-# To load the model, we must provide a function/layer with that exact name in custom_objects.
-# The actual logic is likely inside the layers that the Lambda wraps, so this stub
-# is only necessary for the loading process to complete successfully.
+# --- Custom Object Fix (Needed for model loading) ---
 def bert_encode_stub(input_tensor):
     """
     Stub function for the 'bert_encode' custom object used in the Keras model.
-    This allows load_model to complete without knowing the original internal function.
     """
-    # The actual functionality should be handled by the layers inside the model structure,
-    # so we just return the input tensor, which is safe for model loading.
     return input_tensor
 
 
@@ -30,10 +23,8 @@ def bert_encode_stub(input_tensor):
 def load_assets():
     """Loads the BERT tokenizer and the Keras model."""
     try:
-        # 1. Load Tokenizer using the vocab.txt file directly for better robustness
+        # 1. Load Tokenizer
         st.info("Loading BERT Tokenizer...")
-        
-        # Robust method: Load the tokenizer directly from vocab.txt path
         vocab_path = os.path.join(TOKENIZER_DIR, 'vocab.txt')
         tokenizer = BertTokenizer(
             vocab_file=vocab_path, 
@@ -43,7 +34,7 @@ def load_assets():
         # 2. Load Keras Model with the custom object fix
         st.info(f"Loading Keras Model from {MODEL_PATH}...")
         
-        # We pass the custom stub to prevent the "Unknown object type 'bert_encode'" error
+        # We pass the custom stub for the Lambda layer
         model = tf.keras.models.load_model(
             MODEL_PATH, 
             custom_objects={"bert_encode": bert_encode_stub}, 
@@ -53,19 +44,18 @@ def load_assets():
         return tokenizer, model
     except FileNotFoundError as e:
         st.error(f"Asset loading failed: One or more required files were not found.")
-        st.error(f"Ensure all files (.h5 or .keras, .txt, .json) are in the same directory as this app.py.")
         st.error(f"Missing file or directory issue: {e}")
         st.stop()
     except Exception as e:
         st.error(f"An error occurred during model/tokenizer loading: {e}")
-        st.error("The most likely cause is still an environment issue (dependency mismatch) or a corrupted file.")
-        st.error("Try installing specific versions: pip install tensorflow==2.15.0 transformers==4.38.0")
+        st.error("This is likely due to dependency mismatch. Try installing specific versions: pip install tensorflow==2.15.0 transformers==4.38.0")
         st.stop()
 
 
 # --- Text Preprocessing Function ---
+# CRITICAL CHANGE: This function now returns the dictionary required by the model.
 def preprocess_text(text, tokenizer, max_len):
-    """Encodes the input text into BERT's required input format."""
+    """Encodes the input text into BERT's required input dictionary format."""
     encoded = tokenizer.encode_plus(
         text,
         max_length=max_len,
@@ -73,8 +63,13 @@ def preprocess_text(text, tokenizer, max_len):
         truncation=True,
         return_tensors='tf'  # Returns TensorFlow tensors
     )
-    # BERT-based models typically require input_ids and attention_mask
-    return [encoded['input_ids'], encoded['attention_mask']]
+    
+    # Return a dictionary where keys must match the input layer names of the Keras model.
+    # We assume the layer names are 'input_ids' and 'attention_mask', which is standard.
+    return {
+        'input_ids': encoded['input_ids'],
+        'attention_mask': encoded['attention_mask']
+    }
 
 
 # --- Prediction Function ---
@@ -83,12 +78,12 @@ def predict_fake_news(text, tokenizer, model):
     if not text.strip():
         return "Please enter an article to classify.", None
 
-    # Preprocess the input text
-    inputs = preprocess_text(text, tokenizer, MAX_LEN)
+    # Preprocess the input text (now returns a dictionary)
+    inputs_dict = preprocess_text(text, tokenizer, MAX_LEN)
     
-    # Predict
-    # The model should be called with a list of inputs matching the input layers
-    prediction = model.predict(inputs)
+    # Predict - The model.predict expects the input dictionary
+    # The **inputs_dict is not needed for model.predict, simply passing the dict is enough
+    prediction = model.predict(inputs_dict) 
     
     # Assuming Binary Classification (0=Real, 1=Fake) and sigmoid activation
     fake_prob = prediction[0][0]
@@ -104,7 +99,7 @@ def predict_fake_news(text, tokenizer, model):
     return label, confidence
 
 
-# --- Streamlit UI Layout ---
+# --- Streamlit UI Layout (Unchanged) ---
 def main():
     st.set_page_config(
         page_title="BERT-BiLSTM Fake News Detector",
@@ -207,4 +202,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
