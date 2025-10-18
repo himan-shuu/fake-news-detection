@@ -54,8 +54,7 @@ def load_assets():
             compile=False
         )
         
-        # --- FIX: Removed the model.input_names check to bypass the AttributeError ---
-        # We rely solely on the most common fallback names for multi-input H5 models.
+        # We no longer need input_names, but keep it for structure
         input_names = ['input_1', 'input_2']
             
         # Return all necessary components
@@ -80,10 +79,10 @@ def preprocess_text(text, tokenizer, max_len):
         max_length=max_len,
         padding='max_length',
         truncation=True,
-        return_tensors='tf'  # Returns TensorFlow tensors
+        return_tensors='np'  # *** CRITICAL: Change to NumPy tensors ***
     )
     
-    # Return the two tensors as a tuple (T1=input_ids, T2=attention_mask)
+    # Return the two NumPy arrays directly (T1=input_ids, T2=attention_mask)
     return encoded['input_ids'], encoded['attention_mask']
 
 
@@ -93,25 +92,16 @@ def predict_fake_news(text, tokenizer, model, input_names):
     if not text.strip():
         return "Please enter an article to classify.", None
 
-    # Preprocess the input text (returns the two tensors)
-    input_ids_tensor, attention_mask_tensor = preprocess_text(text, tokenizer, MAX_LEN)
+    # Preprocess the input text (returns two NumPy arrays)
+    input_ids_np, attention_mask_np = preprocess_text(text, tokenizer, MAX_LEN)
     
-    # CRITICAL FIX: Convert Tensors to NumPy arrays and create a dictionary 
-    # using the discovered/fallback input layer names from load_assets.
+    # CRITICAL FIX: Pass the NumPy arrays as a simple list.
+    # This is the most primitive, positional way to feed multi-input Keras models.
+    # Order is typically IDs first, then Mask.
+    inputs_list = [input_ids_np, attention_mask_np]
     
-    # input_names has two elements (['input_1', 'input_2'])
-    
-    # Create the dictionary:
-    inputs_dict = {}
-    
-    # Case 1: Assumed order based on standard BERT input pipeline (T1=IDs, T2=Mask)
-    # Map the first input name to the input_ids tensor (T1)
-    inputs_dict[input_names[0]] = input_ids_tensor.numpy()
-    # Map the second input name to the attention_mask tensor (T2)
-    inputs_dict[input_names[1]] = attention_mask_tensor.numpy()
-    
-    # Predict - using dictionary input with numpy arrays
-    prediction = model.predict(inputs_dict) 
+    # Predict - using list input with numpy arrays
+    prediction = model.predict(inputs_list) 
     
     # Assuming Binary Classification (0=Real, 1=Fake) and sigmoid activation
     fake_prob = prediction[0][0]
