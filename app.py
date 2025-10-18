@@ -30,9 +30,16 @@ def bert_encode_stub(input_tensor):
 def load_assets():
     """Loads the BERT tokenizer and the Keras model."""
     try:
-        # 1. Load Tokenizer using the folder path
+        # 1. Load Tokenizer using the vocab.txt file directly for better robustness
         st.info("Loading BERT Tokenizer...")
-        tokenizer = BertTokenizer.from_pretrained(TOKENIZER_DIR)
+        
+        # New robust method: Load the tokenizer directly from vocab.txt path, bypassing 
+        # potential JSON parsing issues with from_pretrained(directory)
+        vocab_path = os.path.join(TOKENIZER_DIR, 'vocab.txt')
+        tokenizer = BertTokenizer(
+            vocab_file=vocab_path, 
+            do_lower_case=True
+        )
 
         # 2. Load Keras Model with the custom object fix
         st.info(f"Loading Keras Model from {MODEL_PATH}...")
@@ -52,7 +59,7 @@ def load_assets():
         st.stop()
     except Exception as e:
         st.error(f"An error occurred during model/tokenizer loading: {e}")
-        st.error("This is likely due to dependency mismatch (e.g., TensorFlow/Keras version).")
+        st.error("The most likely cause is still an environment issue (dependency mismatch) or a corrupted file.")
         st.error("Try installing specific versions: pip install tensorflow==2.15.0 transformers==4.38.0")
         st.stop()
 
