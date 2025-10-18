@@ -8,13 +8,14 @@ import json
 # --- Configuration Constants ---
 # Using the .h5 file for file accessibility.
 MODEL_PATH = 'fake_news_model_final.h5' 
-TOKENIZER_DIR = './' # Since the tokenizer files are in the root directory
-MAX_LEN = 128 # Based on tokenizer.json snippet
+TOKENIZER_DIR = './' 
+MAX_LEN = 128 
 
 # --- Custom Object Fix (Needed for model loading) ---
 def bert_encode_stub(input_tensor):
     """
     Stub function for the 'bert_encode' custom object used in the Keras model.
+    This resolves the 'Unknown object type' error.
     """
     return input_tensor
 
@@ -24,15 +25,15 @@ def bert_encode_stub(input_tensor):
 def load_assets():
     """Loads the BERT tokenizer, the Keras model, and its expected input names."""
     try:
-        # 1. Load Tokenizer Components Manually (minimalist approach to avoid JSON error)
+        # 1. Load Tokenizer Components Manually (Minimalist approach to avoid JSON error)
         st.info("Loading BERT Tokenizer using only vocab.txt...")
         
         vocab_path = os.path.join(TOKENIZER_DIR, 'vocab.txt')
         if not os.path.exists(vocab_path):
             raise FileNotFoundError(f"Vocab file not found at: {vocab_path}")
             
-        # CRITICAL FIX: Instantiate BertTokenizer using only the vocab file 
-        # and standard BERT special tokens. This bypasses reading the problematic JSON files.
+        # Use the raw constructor with hardcoded standard BERT special tokens. 
+        # This isolates the tokenizer from corrupted JSON configuration files.
         tokenizer = BertTokenizer(
             vocab_file=vocab_path,
             do_lower_case=True,
@@ -53,8 +54,8 @@ def load_assets():
             compile=False
         )
         
-        # We'll return a placeholder to maintain structure.
-        input_names = ['input_ids', 'attention_mask'] # Placeholder
+        # Placeholder for input names
+        input_names = ['attention_mask', 'input_ids'] # Assuming reversed order for prediction
         
         # Return all necessary components
         return tokenizer, model, input_names
@@ -63,7 +64,7 @@ def load_assets():
         st.error(f"Missing file or directory issue: {e}")
         st.stop()
     except Exception as e:
-        # Catch any remaining generic errors (like the Keras ValueError, if it returns)
+        # Generic catch for all other errors
         st.error(f"An error occurred during asset loading: {e}")
         st.error("This is likely due to dependency mismatch. Try installing specific versions: pip install tensorflow==2.15.0 transformers==4.38.0")
         st.stop()
@@ -86,7 +87,6 @@ def preprocess_text(text, tokenizer, max_len):
 
 
 # --- Prediction Function ---
-# CRITICAL CHANGE: The inputs are now passed as a list of tensors.
 def predict_fake_news(text, tokenizer, model, input_names):
     """Runs the model prediction and formats the output."""
     if not text.strip():
@@ -95,8 +95,9 @@ def predict_fake_news(text, tokenizer, model, input_names):
     # Preprocess the input text (returns the two tensors)
     input_ids, attention_mask = preprocess_text(text, tokenizer, MAX_LEN)
     
-    # CRITICAL FIX: Pass inputs as a list (positional matching)
-    inputs_list = [input_ids, attention_mask]
+    # CRITICAL FIX: SWAP ORDERING to [attention_mask, input_ids]
+    # This addresses the Keras ValueError that occurs when the internal H5 layer order is reversed.
+    inputs_list = [attention_mask, input_ids] 
     
     # Predict - This list format is the most robust for multi-input H5 models
     prediction = model.predict(inputs_list) 
@@ -124,7 +125,6 @@ def main():
     )
     
     # Custom CSS for aesthetics
-    # CRITICAL FIX: Store CSS in a variable to avoid multiline string issues near st.markdown
     css_content = """
     <style>
     .stApp {
@@ -175,7 +175,6 @@ def main():
     st.markdown('<p class="subheader">Powered by Hugging Face Tokenizer and Keras</p>', unsafe_allow_html=True)
 
     # --- Load Assets ---
-    # Unpack the new input_names variable (it's now a placeholder)
     tokenizer, model, input_names = load_assets()
 
     # --- Input Area ---
@@ -188,7 +187,6 @@ def main():
     # --- Predict Button ---
     if st.button("Classify Article", use_container_width=True, type="primary"):
         with st.spinner('Analyzing content...'):
-            # Pass input_names (placeholder, but keeps signature consistent)
             label, confidence = predict_fake_news(article_text, tokenizer, model, input_names)
 
         if confidence is not None:
@@ -217,7 +215,6 @@ def main():
                     unsafe_allow_html=True
                 )
         else:
-            # Displays the error message from the predict function (e.g., if text is empty)
             st.warning(label)
 
 if __name__ == "__main__":
