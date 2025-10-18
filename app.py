@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 from transformers import BertTokenizer
 import os
+import json # New import for manual JSON reading
 
 # --- Configuration Constants ---
 # Using the .h5 file for file accessibility.
@@ -23,15 +24,34 @@ def bert_encode_stub(input_tensor):
 def load_assets():
     """Loads the BERT tokenizer, the Keras model, and its expected input names."""
     try:
-        # 1. Load Tokenizer
-        st.info("Loading BERT Tokenizer...")
-        # CRITICAL FIX: Use the standard from_pretrained method on the directory
-        # This is more robust for loading the full configuration (vocab.txt + JSON files)
-        tokenizer = BertTokenizer.from_pretrained(
-            TOKENIZER_DIR, 
-            do_lower_case=True,
-            # trust_remote_code=True is added for increased compatibility
-            trust_remote_code=True 
+        # 1. Load Tokenizer Components Manually
+        st.info("Loading BERT Tokenizer Components Manually...")
+        
+        # Manually load vocab.txt
+        vocab_path = os.path.join(TOKENIZER_DIR, 'vocab.txt')
+        if not os.path.exists(vocab_path):
+            raise FileNotFoundError(f"Vocab file not found at: {vocab_path}")
+            
+        # Manually load JSON configurations
+        config_path = os.path.join(TOKENIZER_DIR, 'tokenizer_config.json')
+        special_tokens_path = os.path.join(TOKENIZER_DIR, 'special_tokens_map.json')
+        
+        if not os.path.exists(config_path) or not os.path.exists(special_tokens_path):
+             raise FileNotFoundError("One or more tokenizer JSON config files are missing.")
+        
+        # Read the JSON files explicitly
+        with open(config_path, 'r', encoding='utf-8') as f:
+            tokenizer_config = json.load(f)
+            
+        with open(special_tokens_path, 'r', encoding='utf-8') as f:
+            special_tokens_map = json.load(f)
+            
+        # Use the raw constructor and pass files/configs directly
+        tokenizer = BertTokenizer(
+            vocab_file=vocab_path,
+            **tokenizer_config, # Unpack settings from tokenizer_config.json
+            **special_tokens_map, # Unpack special tokens from special_tokens_map.json
+            do_lower_case=True 
         )
 
         # 2. Load Keras Model with the custom object fix
@@ -52,6 +72,10 @@ def load_assets():
     except FileNotFoundError as e:
         st.error(f"Asset loading failed: One or more required files were not found.")
         st.error(f"Missing file or directory issue: {e}")
+        st.stop()
+    except json.JSONDecodeError as e:
+        st.error(f"JSON Decoding Error: One of your tokenizer JSON files is likely corrupted or empty. Error: {e}")
+        st.error("This is the 'Expecting value' error. Please re-upload or check your JSON files.")
         st.stop()
     except Exception as e:
         st.error(f"An error occurred during model/tokenizer loading: {e}")
