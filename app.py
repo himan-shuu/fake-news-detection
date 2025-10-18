@@ -5,8 +5,8 @@ from transformers import BertTokenizer
 import os
 
 # --- Configuration Constants ---
-# Use the .keras file as it is the newer, more robust format.
-MODEL_PATH = 'fake_news_model_final.keras'
+# CHANGED: Switching to the .h5 file for greater file accessibility/robustness in deployment.
+MODEL_PATH = 'fake_news_model_final.h5' 
 TOKENIZER_DIR = './' # Since the tokenizer files are in the root directory
 MAX_LEN = 128 # Based on tokenizer.json snippet
 
@@ -33,8 +33,7 @@ def load_assets():
         # 1. Load Tokenizer using the vocab.txt file directly for better robustness
         st.info("Loading BERT Tokenizer...")
         
-        # New robust method: Load the tokenizer directly from vocab.txt path, bypassing 
-        # potential JSON parsing issues with from_pretrained(directory)
+        # Robust method: Load the tokenizer directly from vocab.txt path
         vocab_path = os.path.join(TOKENIZER_DIR, 'vocab.txt')
         tokenizer = BertTokenizer(
             vocab_file=vocab_path, 
@@ -54,7 +53,7 @@ def load_assets():
         return tokenizer, model
     except FileNotFoundError as e:
         st.error(f"Asset loading failed: One or more required files were not found.")
-        st.error(f"Ensure all files (.keras, .txt, .json) are in the same directory as this app.py.")
+        st.error(f"Ensure all files (.h5 or .keras, .txt, .json) are in the same directory as this app.py.")
         st.error(f"Missing file or directory issue: {e}")
         st.stop()
     except Exception as e:
@@ -208,3 +207,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
