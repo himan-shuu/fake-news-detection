@@ -5,7 +5,7 @@ from transformers import BertTokenizer
 import os
 
 # --- Configuration Constants ---
-# Using the .h5 file as switched in the previous step.
+# Using the .h5 file for file accessibility.
 MODEL_PATH = 'fake_news_model_final.h5' 
 TOKENIZER_DIR = './' # Since the tokenizer files are in the root directory
 MAX_LEN = 128 # Based on tokenizer.json snippet
@@ -21,7 +21,7 @@ def bert_encode_stub(input_tensor):
 # --- Model and Tokenizer Loading ---
 @st.cache_resource
 def load_assets():
-    """Loads the BERT tokenizer and the Keras model."""
+    """Loads the BERT tokenizer, the Keras model, and its expected input names."""
     try:
         # 1. Load Tokenizer
         st.info("Loading BERT Tokenizer...")
@@ -41,7 +41,12 @@ def load_assets():
             compile=False
         )
         
-        return tokenizer, model
+        # NOTE: We no longer need model.input_names, but the function signature still returns it. 
+        # We'll return a placeholder to maintain structure.
+        input_names = ['input_ids', 'attention_mask'] # Placeholder
+        
+        # Return all necessary components
+        return tokenizer, model, input_names
     except FileNotFoundError as e:
         st.error(f"Asset loading failed: One or more required files were not found.")
         st.error(f"Missing file or directory issue: {e}")
@@ -53,9 +58,9 @@ def load_assets():
 
 
 # --- Text Preprocessing Function ---
-# CRITICAL CHANGE: This function now returns the dictionary required by the model.
 def preprocess_text(text, tokenizer, max_len):
     """Encodes the input text into BERT's required input dictionary format."""
+    # The tokenizer always returns 'input_ids' and 'attention_mask'
     encoded = tokenizer.encode_plus(
         text,
         max_length=max_len,
@@ -64,26 +69,25 @@ def preprocess_text(text, tokenizer, max_len):
         return_tensors='tf'  # Returns TensorFlow tensors
     )
     
-    # Return a dictionary where keys must match the input layer names of the Keras model.
-    # We assume the layer names are 'input_ids' and 'attention_mask', which is standard.
-    return {
-        'input_ids': encoded['input_ids'],
-        'attention_mask': encoded['attention_mask']
-    }
+    # Return the two tensors as a tuple
+    return encoded['input_ids'], encoded['attention_mask']
 
 
 # --- Prediction Function ---
-def predict_fake_news(text, tokenizer, model):
+# CRITICAL CHANGE: The inputs are now passed as a list of tensors.
+def predict_fake_news(text, tokenizer, model, input_names):
     """Runs the model prediction and formats the output."""
     if not text.strip():
         return "Please enter an article to classify.", None
 
-    # Preprocess the input text (now returns a dictionary)
-    inputs_dict = preprocess_text(text, tokenizer, MAX_LEN)
+    # Preprocess the input text (returns the two tensors)
+    input_ids, attention_mask = preprocess_text(text, tokenizer, MAX_LEN)
     
-    # Predict - The model.predict expects the input dictionary
-    # The **inputs_dict is not needed for model.predict, simply passing the dict is enough
-    prediction = model.predict(inputs_dict) 
+    # CRITICAL FIX: Pass inputs as a list (positional matching)
+    inputs_list = [input_ids, attention_mask]
+    
+    # Predict - This list format is the most robust for multi-input H5 models
+    prediction = model.predict(inputs_list) 
     
     # Assuming Binary Classification (0=Real, 1=Fake) and sigmoid activation
     fake_prob = prediction[0][0]
@@ -99,7 +103,7 @@ def predict_fake_news(text, tokenizer, model):
     return label, confidence
 
 
-# --- Streamlit UI Layout (Unchanged) ---
+# --- Streamlit UI Layout ---
 def main():
     st.set_page_config(
         page_title="BERT-BiLSTM Fake News Detector",
@@ -157,7 +161,8 @@ def main():
     st.markdown('<p class="subheader">Powered by Hugging Face Tokenizer and Keras</p>', unsafe_allow_html=True)
 
     # --- Load Assets ---
-    tokenizer, model = load_assets()
+    # Unpack the new input_names variable (it's now a placeholder)
+    tokenizer, model, input_names = load_assets()
 
     # --- Input Area ---
     article_text = st.text_area(
@@ -169,7 +174,8 @@ def main():
     # --- Predict Button ---
     if st.button("Classify Article", use_container_width=True, type="primary"):
         with st.spinner('Analyzing content...'):
-            label, confidence = predict_fake_news(article_text, tokenizer, model)
+            # Pass input_names (placeholder, but keeps signature consistent)
+            label, confidence = predict_fake_news(article_text, tokenizer, model, input_names)
 
         if confidence is not None:
             
