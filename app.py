@@ -54,16 +54,9 @@ def load_assets():
             compile=False
         )
         
-        # Determine the correct input names from the model structure
-        # This is CRITICAL for dictionary input. We assume the standard order if names are simple.
-        
-        # Fallback names based on typical Keras H5 structure (input_1 and input_2)
-        # We will use the canonical BERT names in the dictionary for prediction, but check if the model uses generic names.
-        if len(model.input_names) == 2:
-            input_names = model.input_names
-        else:
-            # Most common fallback when names are not explicitly carried over
-            input_names = ['input_1', 'input_2']
+        # --- FIX: Removed the model.input_names check to bypass the AttributeError ---
+        # We rely solely on the most common fallback names for multi-input H5 models.
+        input_names = ['input_1', 'input_2']
             
         # Return all necessary components
         return tokenizer, model, input_names
@@ -105,12 +98,8 @@ def predict_fake_news(text, tokenizer, model, input_names):
     
     # CRITICAL FIX: Convert Tensors to NumPy arrays and create a dictionary 
     # using the discovered/fallback input layer names from load_assets.
-    # This guarantees the required data structure for the Keras H5 prediction method.
     
-    # The order of inputs is assumed to be Input_IDs (Token IDs) followed by Attention_Mask.
-    # We must match the order of `input_names` retrieved/defaulted in load_assets.
-    
-    # input_names has two elements (e.g., ['input_1', 'input_2'])
+    # input_names has two elements (['input_1', 'input_2'])
     
     # Create the dictionary:
     inputs_dict = {}
